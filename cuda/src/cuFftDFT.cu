@@ -19,7 +19,9 @@ Cuda::cuFftDFT::preTransformTasks(
 {
     // Allocate memory for the input and output arrays in the GPU   
     static Cuda::memArgs<cufftComplex> dmem;
+
     assert(cudaMalloc( &dmem.in, size*sizeof(cufftComplex) ) == cudaSuccess);
+
     if( dmem.in == dmem.out ) dmem.out = const_cast<cufftComplex*>(dmem.in);
     else assert(cudaMalloc( &dmem.out, size*sizeof(cufftComplex) ) == cudaSuccess);
 
@@ -63,17 +65,66 @@ void Cuda::cuFftDFT::gen1d(const complex_t* in, complex_t* out, int size, int di
     postTransformTasks(hmem, dmem, size);
 }
 
+void Cuda::cuFftDFT::gen1b(const complex_t* in, complex_t* out, int nrows, int ncols, int axis, int dir) const
+{
+    static cufftHandle plan;
+    Cuda::memArgs<complex_t> hmem{in, out};
+    Cuda::memArgs<cufftComplex> dmem = preTransformTasks(hmem, nrows*ncols);
+
+    // Create the plan and perform the transform
+    assert(axis == 0 || axis == 1);
+    if( axis == 0 )
+    {
+        assert(cufftPlanMany(
+            &plan, 1, new int[2] {ncols, nrows}, 
+            &nrows, 1, ncols, 
+            &nrows, 1, ncols, 
+            CUFFT_C2C, nrows 
+        ) == CUFFT_SUCCESS);
+    } else
+    {
+        assert(cufftPlanMany(
+            &plan, 1, new int[2] {ncols, nrows}, 
+            &ncols, nrows, 1, 
+            &ncols, nrows, 1, 
+            CUFFT_C2C, nrows 
+        ) == CUFFT_SUCCESS);
+    }
+
+    assert(cufftExecC2C(plan, const_cast<cufftComplex*>(dmem.in), dmem.out, dir) == CUFFT_SUCCESS);
+    
+    postTransformTasks(hmem, dmem, nrows*ncols);
+}
+
+void Cuda::cuFftDFT::gen2d(const complex_t* in, complex_t* out, int nrows, int ncols, int dir) const
+{
+    static cufftHandle plan;
+    Cuda::memArgs<complex_t> hmem{in, out};
+    Cuda::memArgs<cufftComplex> dmem = preTransformTasks(hmem, nrows*ncols);
+
+    assert(cufftPlan2d(&plan, nrows, ncols, CUFFT_C2C) == CUFFT_SUCCESS);
+    assert(cufftExecC2C(plan, const_cast<cufftComplex*>(dmem.in), dmem.out, dir) == CUFFT_SUCCESS);
+    
+    postTransformTasks(hmem, dmem, nrows*ncols);
+}
+
 void Cuda::cuFftDFT::fwd1d(const complex_t* in, complex_t* out, int size) const
 { gen1d(in, out, size, CUFFT_FORWARD); }
 
 void Cuda::cuFftDFT::inv1d(const complex_t* in, complex_t* out, int size) const 
 { gen1d(in, out, size, CUFFT_INVERSE); }
 
-void Cuda::cuFftDFT::fwd1b(const complex_t* in, complex_t* out, int nrows, int ncols, int axis) const {}
-void Cuda::cuFftDFT::inv1b(const complex_t* in, complex_t* out, int nrows, int ncols, int axis) const {}
+void Cuda::cuFftDFT::fwd1b(const complex_t* in, complex_t* out, int nrows, int ncols, int axis) const 
+{ gen1b(in, out, nrows, ncols, axis, CUFFT_FORWARD); }
 
-void Cuda::cuFftDFT::fwd2d(const complex_t* in, complex_t* out, int nrows, int ncols) const {}
-void Cuda::cuFftDFT::inv2d(const complex_t* in, complex_t* out, int nrows, int ncols) const {}
+void Cuda::cuFftDFT::inv1b(const complex_t* in, complex_t* out, int nrows, int ncols, int axis) const 
+{ gen1b(in, out, nrows, ncols, axis, CUFFT_INVERSE); }
+
+void Cuda::cuFftDFT::fwd2d(const complex_t* in, complex_t* out, int nrows, int ncols) const 
+{ gen2d(in, out, nrows, ncols, CUFFT_FORWARD); }
+
+void Cuda::cuFftDFT::inv2d(const complex_t* in, complex_t* out, int nrows, int ncols) const 
+{ gen2d(in, out, nrows, ncols, CUFFT_INVERSE); }
 
 void Cuda::cuFftDFT::transpose(const scalar_t* in, scalar_t* out, int nrows, int ncols) const {}
 void Cuda::cuFftDFT::transpose(const complex_t* in, complex_t* out, int nrows, int ncols) const {}

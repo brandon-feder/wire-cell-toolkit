@@ -28,7 +28,10 @@
                  * unlike FFTW3, cuFFT uses the same plan and execution function for both 
                  * the forward and inverse transforms. */
                 void gen1d(const complex_t* in, complex_t* out, int size, int dir) const;
-
+                void gen1b(const complex_t* in, complex_t* out, int nrows, int ncols, int axis, int dir) const;
+                void gen2d(const complex_t* in, complex_t* out, int nrows, int ncols, int dir) const;
+                                
+                // std::shared_mutex mutex;
             public:
                 // See `IDFT.h` for more information about these.
                 cuFftDFT() = default;
